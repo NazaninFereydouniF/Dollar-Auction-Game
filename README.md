@@ -1,5 +1,14 @@
 # 🎲 Dollar Auction Game
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white" alt="Python 3.9+">
+  <img src="https://img.shields.io/badge/Language-English-lightgrey" alt="English">
+  <img src="https://img.shields.io/badge/Interface-CLI%20%7C%20Jupyter-blueviolet" alt="CLI / Jupyter">
+  <img src="https://img.shields.io/badge/Output-CSV-brightgreen" alt="CSV Output">
+  <img src="https://img.shields.io/badge/Dependencies-Standard%20Library-success" alt="Standard Library only">
+  <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="MIT License">
+</p>
+
 A flexible, self-contained implementation of Martin Shubik's **Dollar Auction** (1971) using **only the Python standard library**. Runs in the VS Code terminal and in Jupyter Notebook (via `%run dollar_auction.py`).
 
 ## 📖 About the Game
@@ -69,7 +78,9 @@ The computer agents are simple, illustrative heuristics and are not a substitute
 
 ## ⚖️ License
 This project is provided for educational and research purposes.
-Suggested [license]: MIT.
+<p>Released under the MIT License · See the <a href="LICENSE">LICENSE</a> file for details.</p>
+<p>⚠️ Educational use only — not a validated experimental protocol for human-subject research.</p>
+
 
 ## 🤝 Contributing
 
