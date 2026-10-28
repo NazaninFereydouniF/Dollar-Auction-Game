@@ -69,7 +69,7 @@ The computer agents are simple, illustrative heuristics and are not a substitute
 
 ## ⚖️ License
 This project is provided for educational and research purposes.
-Suggested license: MIT.
+Suggested [license]: MIT.
 
 ## 🤝 Contributing
 
