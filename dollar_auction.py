@@ -130,7 +130,7 @@ def record_decision(s: Session, p: Player, opp: Player, action: str, bid: Decima
         s.leader_id = p.pid
     s.stages += 1
     selected_rt = rt_a if s.reaction_mode == MODE_A else rt_b
-    s.events.append(Event(str(uuid.uuid4()), s.stages, p.pid, opp.pid, action, bid, opp.last_bid, submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b, selected_rt, s.reaction_mode, old_leader, s.leader_id, increment, escalation, leader_change))
+    s.events.append(Event(str(uuid.uuid4()), s.stages, p.pid, opp.pid, action, bid, opp.last_bid, submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b, selected_rt, s.reaction_mode, old_leader, s.leader_id, increment,escalation, leader_change))
 
 def play(s: Session):
     order = s.players[:]
@@ -165,7 +165,7 @@ def outcome(s: Session):
         else:
             payoffs[p.pid] = -p.last_bid
     winning_bid = next((p.last_bid for p in s.players if p.pid == winner), None)
-    return {"ended": ended,
+    return {"ended": ended, 
             "duration": duration, 
             "winner": winner, 
             "loser": loser,
@@ -174,7 +174,6 @@ def outcome(s: Session):
             "winning_bid": winning_bid,
             "winning_bid_minus_prize": winning_bid - s.prize_toman if winning_bid is not None else None,
             "winning_bid_ratio": float(winning_bid / s.prize_toman) if winning_bid is not None and s.prize_toman > 0 else None}
-
 
 def validate_game(s: Session, result: dict) -> list[str]:
     #Validate event order, bid progression, leader state, and first-game payoffs. Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
@@ -243,6 +242,7 @@ def validate_game(s: Session, result: dict) -> list[str]:
     checks.extend(["sequential stages and valid action types", "strictly increasing bids and bid increments", "leader and opponent-bid history reconstructed from events", "final bids, winner, payments, and net payoffs consistent with Game 1"])
     return checks
 
+
 def non_overwriting_path(path: Path) -> Path:
     #Return path if unused, otherwise choose a numbered filename without overwriting.
 
@@ -276,26 +276,44 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
                    "action": e.action, 
                    "new_bid_toman": blank(e.bid),
                    "opponent_previous_bid_toman": format(e.opponent_previous_bid, "f"),
-                   "event_timestamp": e.event_timestamp, "opponent_bid_displayed_at": e.opponent_bid_displayed_at,
+                   "event_timestamp": e.event_timestamp,
+                   "opponent_bid_displayed_at": e.opponent_bid_displayed_at,
                    "response_opportunity_started_at": e.response_opportunity_started_at,
-                   "response_submitted_at": e.response_submitted_at,"reaction_time_seconds_mode_a": f"{e.rt_a:.6f}", "reaction_time_seconds_mode_b": f"{e.rt_b:.6f}",
-                   "selected_reaction_mode": e.selected_mode, "selected_reaction_time_seconds": f"{e.selected_rt:.6f}",
-                   "previous_leader_id": e.previous_leader_id or "", "leader_after_decision_id": e.leader_after_id or "",
-                   "bid_increment_toman": blank(e.bid_increment), "is_escalation": e.escalation,
-                   "is_leader_change": e.leader_change, "prize_usd": format(s.prize_usd, "f"),
-                   "usd_to_toman_rate": format(s.rate, "f"), "prize_toman": format(s.prize_toman, "f"),
-                   "rate_source": s.rate_source, "rate_method": "manual", "rate_timestamp": s.rate_timestamp,
-                   "round_started_at": s.started_at, "round_ended_at": result["ended"],
-                   "round_duration_seconds": f"{result['duration']:.6f}", "total_bids": bids,
-                   "total_stages": s.stages, "escalation_count": s.escalation_count,
-                   "leader_change_count": s.leader_change_count, "winner_id": result["winner"] or "",
-                   "loser_id": result["loser"] or "", "winning_bid_toman": blank(result["winning_bid"]),
+                   "response_submitted_at": e.response_submitted_at,
+                   "reaction_time_seconds_mode_a": f"{e.rt_a:.6f}",
+                   "reaction_time_seconds_mode_b": f"{e.rt_b:.6f}",
+                   "selected_reaction_mode": e.selected_mode, 
+                   "selected_reaction_time_seconds": f"{e.selected_rt:.6f}",
+                   "previous_leader_id": e.previous_leader_id or "", 
+                   "leader_after_decision_id": e.leader_after_id or "",
+                   "bid_increment_toman": blank(e.bid_increment), 
+                   "is_escalation": e.escalation,
+                   "is_leader_change": e.leader_change, 
+                   "prize_usd": format(s.prize_usd, "f"),
+                   "usd_to_toman_rate": format(s.rate, "f"), 
+                   "prize_toman": format(s.prize_toman, "f"),
+                   "rate_source": s.rate_source, 
+                   "rate_method": "manual", 
+                   "rate_timestamp": s.rate_timestamp,
+                   "round_started_at": s.started_at, 
+                   "round_ended_at": result["ended"],
+                   "round_duration_seconds": f"{result['duration']:.6f}", 
+                   "total_bids": bids,
+                   "total_stages": s.stages, 
+                   "escalation_count": s.escalation_count,
+                   "leader_change_count": s.leader_change_count, 
+                   "winner_id": result["winner"] or "",
+                   "loser_id": result["loser"] or "", 
+                   "winning_bid_toman": blank(result["winning_bid"]),
                    "winning_bid_minus_prize_toman": blank(result["winning_bid_minus_prize"]),
                    "winning_bid_to_prize_ratio": "" if result["winning_bid_ratio"] is None else f"{result['winning_bid_ratio']:.6f}",
                    "participant_final_bid_toman": format(p.last_bid, "f"),
                    "participant_payment_toman": format(result["payments"][p.pid], "f"),
                    "participant_net_payoff_toman": format(result["payoffs"][p.pid], "f"),
-                   "termination_reason": s.termination_reason, "arousal_condition": "", "condition_order": "", "notes": notes}
+                   "termination_reason": s.termination_reason, 
+                   "arousal_condition": "", 
+                   "condition_order": "", 
+                   "notes": notes}
             writer.writerow(row)
 
 def main():
@@ -315,7 +333,8 @@ def main():
     p1_label = input("Participant 1 label (use a pseudonym, not a real name) [Player A]: ").strip() or "Player A"
     p2_label = input("Participant 2 label (use a pseudonym, not a real name) [Player B]: ").strip() or "Player B"
     p1, p2 = Player("P-" + uuid.uuid4().hex[:8].upper(), p1_label), Player("P-" + uuid.uuid4().hex[:8].upper(), p2_label)
-    s = Session("S-" + uuid.uuid4().hex, prize_usd, rate, prize_usd * rate, rate_source, rate_timestamp, MODE_A if mode == "a" else MODE_B, [p1, p2])
+    s = Session("S-" + uuid.uuid4().hex, prize_usd, rate, prize_usd * rate, rate_source, rate_timestamp,
+                MODE_A if mode == "a" else MODE_B, [p1, p2])
     print(f"\nFixed prize: {money(s.prize_toman)} toman (${money(prize_usd)} × {money(rate)} toman/USD)")
     print(f"Session ID: {s.sid}; rate timestamp (UTC): {rate_timestamp}; method: manual")
     input("Read the same neutral instructions to both participants, then press Enter to start...")
