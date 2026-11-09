@@ -9,7 +9,6 @@ GAME_VERSION = "thesis_game_1_last_bid_payment"
 MODE_A = "A_opportunity_start_to_response"
 MODE_B = "B_opponent_bid_display_to_response"
 
-
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -131,11 +130,7 @@ def record_decision(s: Session, p: Player, opp: Player, action: str, bid: Decima
         s.leader_id = p.pid
     s.stages += 1
     selected_rt = rt_a if s.reaction_mode == MODE_A else rt_b
-    s.events.append(Event(
-        str(uuid.uuid4()), s.stages, p.pid, opp.pid, action, bid, opp.last_bid,
-        submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b,
-        selected_rt, s.reaction_mode, old_leader, s.leader_id, increment,
-        escalation, leader_change))
+    s.events.append(Event(str(uuid.uuid4()), s.stages, p.pid, opp.pid, action, bid, opp.last_bid, submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b, selected_rt, s.reaction_mode, old_leader, s.leader_id, increment, escalation, leader_change))
 
 def play(s: Session):
     order = s.players[:]
@@ -170,10 +165,98 @@ def outcome(s: Session):
         else:
             payoffs[p.pid] = -p.last_bid
     winning_bid = next((p.last_bid for p in s.players if p.pid == winner), None)
-    return {"ended": ended, "duration": duration, "winner": winner, "loser": loser, "payments": payments, "payoffs": payoffs, "winning_bid": winning_bid, 
-            "winning_bid_minus_prize": winning_bid - s.prize_toman if winning_bid is not None else None, "winning_bid_ratio": float(winning_bid / s.prize_toman) if winning_bid is not None and s.prize_toman > 0 else None}
+    return {"ended": ended,
+            "duration": duration, 
+            "winner": winner, 
+            "loser": loser,
+            "payments": payments, 
+            "payoffs": payoffs, 
+            "winning_bid": winning_bid,
+            "winning_bid_minus_prize": winning_bid - s.prize_toman if winning_bid is not None else None,
+            "winning_bid_ratio": float(winning_bid / s.prize_toman) if winning_bid is not None and s.prize_toman > 0 else None}
 
-FIELDS = ["game_version", "session_id", "round_number", "event_id", "stage_number","participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman","event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at","response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b","selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id","leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change", "prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp", "round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages", "escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman", "winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman", "participant_payment_toman", "participant_net_payoff_toman", "termination_reason","arousal_condition", "condition_order", "notes"]
+
+def validate_game(s: Session, result: dict) -> list[str]:
+    #Validate event order, bid progression, leader state, and first-game payoffs. Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
+    
+    if not s.events:
+        raise ValueError("A game must contain at least one decision event.")
+    player_ids = {p.pid for p in s.players}
+    if len(player_ids) != 2:
+        raise ValueError("This prototype must contain exactly two players.")
+    if len({e.event_id for e in s.events}) != len(s.events):
+        raise ValueError("Duplicate event_id detected.")
+
+    last_bids = {pid: Decimal("0") for pid in player_ids}
+    highest = Decimal("0")
+    leader = None
+    checks = ["two-player roster and unique event IDs"]
+
+    for expected_stage, e in enumerate(s.events, start=1):
+        if e.stage != expected_stage:
+            raise ValueError(f"Non-sequential stage number at event {expected_stage}.")
+        if e.pid not in player_ids or e.opponent_id not in player_ids or e.pid == e.opponent_id:
+            raise ValueError(f"Unknown or invalid participant IDs at stage {e.stage}.")
+        if e.action not in {"bid", "pass"}:
+            raise ValueError(f"Invalid action at stage {e.stage}: {e.action!r}.")
+        if e.previous_leader_id != leader:
+            raise ValueError(f"Previous leader mismatch at stage {e.stage}.")
+        if e.opponent_previous_bid != last_bids[e.opponent_id]:
+            raise ValueError(f"Opponent's previous bid mismatch at stage {e.stage}.")
+
+        if e.action == "bid":
+            if e.bid is None or e.bid <= highest:
+                raise ValueError(f"Bid is missing or not strictly increasing at stage {e.stage}.")
+            if e.bid_increment != e.bid - highest:
+                raise ValueError(f"Bid increment mismatch at stage {e.stage}.")
+            last_bids[e.pid] = e.bid
+            highest = e.bid
+            leader = e.pid
+        elif e.bid is not None:
+            raise ValueError(f"Pass action must not contain a bid at stage {e.stage}.")
+
+        if e.leader_after_id != leader:
+            raise ValueError(f"Leader-after-decision mismatch at stage {e.stage}.")
+
+    if s.highest_bid != highest or s.leader_id != leader:
+        raise ValueError("Final game state does not match the recorded event stream.")
+    for p in s.players:
+        if p.last_bid != last_bids[p.pid]:
+            raise ValueError(f"Final bid mismatch for participant {p.pid}.")
+
+    expected_winner = leader
+    if result["winner"] != expected_winner:
+        raise ValueError("Winner does not match the final valid bid.")
+    for p in s.players:
+        expected_payment = last_bids[p.pid]
+        if result["payments"][p.pid] != expected_payment:
+            raise ValueError(f"Payment mismatch for participant {p.pid}.")
+        if expected_winner is None:
+            expected_payoff = Decimal("0")
+        elif p.pid == expected_winner:
+            expected_payoff = s.prize_toman - last_bids[p.pid]
+        else:
+            expected_payoff = -last_bids[p.pid]
+        if result["payoffs"][p.pid] != expected_payoff:
+            raise ValueError(f"Net payoff mismatch for participant {p.pid}.")
+
+    checks.extend(["sequential stages and valid action types", "strictly increasing bids and bid increments", "leader and opponent-bid history reconstructed from events", "final bids, winner, payments, and net payoffs consistent with Game 1"])
+    return checks
+
+def non_overwriting_path(path: Path) -> Path:
+    #Return path if unused, otherwise choose a numbered filename without overwriting.
+
+    if not path.exists():
+        return path
+    stem, suffix = path.stem, path.suffix
+    index = 2
+    while True:
+        candidate = path.with_name(f"{stem}_{index}{suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+FIELDS = ["game_version", "session_id", "round_number", "event_id", "stage_number", "participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman", "event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at", "response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b", "selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id", "leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change", "prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp", "round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages", "escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman", "winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman", "participant_payment_toman", "participant_net_payoff_toman", "termination_reason", "arousal_condition", "condition_order", "notes"]
 
 def save_csv(s: Session, result: dict, path: Path, notes: str):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -183,17 +266,22 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
         writer.writeheader()
         for e in s.events:
             p = next(x for x in s.players if x.pid == e.pid)
-            row = {"game_version": GAME_VERSION, "session_id": s.sid, 
-                   "round_number": 1, 
+            row = {"game_version": GAME_VERSION, 
+                   "session_id": s.sid, 
+                   "round_number": 1,
                    "event_id": e.event_id, 
                    "stage_number": e.stage, 
-                   "participant_id": e.pid, 
+                   "participant_id": e.pid,
                    "opponent_id": e.opponent_id, 
                    "action": e.action, 
                    "new_bid_toman": blank(e.bid),
                    "opponent_previous_bid_toman": format(e.opponent_previous_bid, "f"),
-                   "event_timestamp": e.event_timestamp, "opponent_bid_displayed_at": e.opponent_bid_displayed_at,"response_opportunity_started_at": e.response_opportunity_started_at,
-                   "response_submitted_at": e.response_submitted_at,"reaction_time_seconds_mode_a": f"{e.rt_a:.6f}", "reaction_time_seconds_mode_b": f"{e.rt_b:.6f}","selected_reaction_mode": e.selected_mode, "selected_reaction_time_seconds": f"{e.selected_rt:.6f}","previous_leader_id": e.previous_leader_id or "", "leader_after_decision_id": e.leader_after_id or "","bid_increment_toman": blank(e.bid_increment), "is_escalation": e.escalation,
+                   "event_timestamp": e.event_timestamp, "opponent_bid_displayed_at": e.opponent_bid_displayed_at,
+                   "response_opportunity_started_at": e.response_opportunity_started_at,
+                   "response_submitted_at": e.response_submitted_at,"reaction_time_seconds_mode_a": f"{e.rt_a:.6f}", "reaction_time_seconds_mode_b": f"{e.rt_b:.6f}",
+                   "selected_reaction_mode": e.selected_mode, "selected_reaction_time_seconds": f"{e.selected_rt:.6f}",
+                   "previous_leader_id": e.previous_leader_id or "", "leader_after_decision_id": e.leader_after_id or "",
+                   "bid_increment_toman": blank(e.bid_increment), "is_escalation": e.escalation,
                    "is_leader_change": e.leader_change, "prize_usd": format(s.prize_usd, "f"),
                    "usd_to_toman_rate": format(s.rate, "f"), "prize_toman": format(s.prize_toman, "f"),
                    "rate_source": s.rate_source, "rate_method": "manual", "rate_timestamp": s.rate_timestamp,
@@ -216,21 +304,32 @@ def main():
     print("No fixed increment or maximum bid. Type P to pass.\n")
     prize_usd = ask_decimal("Prize value in USD: ", "Prize value", True)
     rate = ask_decimal("Manual free-market rate (TOMAN per USD): ", "Rate", True)
-    rate_source = input("Rate source/description (record what you actually used): ").strip()
     rate_timestamp = now_utc()
+    # capture when the rate is entered, not after later prompts
+    rate_source = input("Rate source/description (record what you actually used): ").strip()
+    if not rate_source:
+        rate_source = "Not provided by researcher"
     mode = input("Reaction mode [A = opportunity start / B = bid display]: ").strip().lower()
     while mode not in {"a", "b"}:
         mode = input("Enter A or B: ").strip().lower()
     p1_label = input("Participant 1 label (use a pseudonym, not a real name) [Player A]: ").strip() or "Player A"
     p2_label = input("Participant 2 label (use a pseudonym, not a real name) [Player B]: ").strip() or "Player B"
     p1, p2 = Player("P-" + uuid.uuid4().hex[:8].upper(), p1_label), Player("P-" + uuid.uuid4().hex[:8].upper(), p2_label)
-    s = Session("S-" + uuid.uuid4().hex, prize_usd, rate, prize_usd * rate, rate_source, rate_timestamp,
-                MODE_A if mode == "a" else MODE_B, [p1, p2])
+    s = Session("S-" + uuid.uuid4().hex, prize_usd, rate, prize_usd * rate, rate_source, rate_timestamp, MODE_A if mode == "a" else MODE_B, [p1, p2])
     print(f"\nFixed prize: {money(s.prize_toman)} toman (${money(prize_usd)} × {money(rate)} toman/USD)")
     print(f"Session ID: {s.sid}; rate timestamp (UTC): {rate_timestamp}; method: manual")
     input("Read the same neutral instructions to both participants, then press Enter to start...")
     play(s)
     r = outcome(s)
+    try:
+        checks = validate_game(s, r)
+    except ValueError as exc:
+        print(f"VALIDATION FAILED: {exc}")
+        print("The result will not be written as a validated CSV. Preserve the session details for debugging.")
+        return
+    print("\nVALIDATION PASSED")
+    for check in checks:
+        print(f"  - {check}")
     print("\nRESULT")
     if r["winner"]:
         winner = next(p for p in s.players if p.pid == r["winner"])
@@ -244,8 +343,12 @@ def main():
     default = f"dollar_auction_game1_{s.sid}.csv"
     out = input(f"CSV path [{default}]: ").strip() or default
     notes = input("Optional non-identifying notes: ").strip()
-    save_csv(s, r, Path(out).expanduser(), notes)
-    print(f"CSV saved to {Path(out).expanduser().resolve()}")
+    requested_path = Path(out).expanduser()
+    safe_path = non_overwriting_path(requested_path)
+    if safe_path != requested_path:
+        print(f"File already exists; preserving it. New output path: {safe_path}")
+    save_csv(s, r, safe_path, notes)
+    print(f"CSV saved to {safe_path.resolve()}")
     print("Research caution: pilot and validate this prototype before collecting study data.")
 
 if __name__ == "__main__":
