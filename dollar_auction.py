@@ -130,9 +130,7 @@ def record_decision(s: Session, p: Player, opp: Player, action: str, bid: Decima
         s.leader_id = p.pid
     s.stages += 1
     selected_rt = rt_a if s.reaction_mode == MODE_A else rt_b
-    s.events.append(Event(
-        f"EVT-{s.stages:03d}", s.stages, p.pid, opp.pid, action, bid, opp.last_bid, submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b, selected_rt, s.reaction_mode, old_leader, s.leader_id, increment,
-        escalation, leader_change))
+    s.events.append(Event(f"EVT-{s.stages:03d}", s.stages, p.pid, opp.pid, action, bid, opp.last_bid, submitted_at, display_at, opportunity_at, submitted_at, rt_a, rt_b, selected_rt, s.reaction_mode, old_leader, s.leader_id, increment, escalation, leader_change))
 
 def play(s: Session):
     order = s.players[:]
@@ -178,7 +176,7 @@ def outcome(s: Session):
             "winning_bid_ratio": float(winning_bid / s.prize_toman) if winning_bid is not None and s.prize_toman > 0 else None}
 
 def validate_game(s: Session, result: dict) -> list[str]:
-    #Validate event order, bid progression, leader state, and first-game payoffs. Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
+    #Validate event order, bid progression, leader state, and first-game payoffs.Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
     
     if not s.events:
         raise ValueError("A game must contain at least one decision event.")
@@ -244,6 +242,7 @@ def validate_game(s: Session, result: dict) -> list[str]:
     checks.extend(["sequential stages and valid action types", "strictly increasing bids and bid increments", "leader and opponent-bid history reconstructed from events", "final bids, winner, payments, and net payoffs consistent with Game 1"])
     return checks
 
+
 def non_overwriting_path(path: Path) -> Path:
     #Return path if unused, otherwise choose a numbered filename without overwriting.
     if not path.exists():
@@ -290,7 +289,7 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
                    "selected_reaction_time_seconds": f"{e.selected_rt:.6f}",
                    "previous_leader_id": e.previous_leader_id or "", 
                    "leader_after_decision_id": e.leader_after_id or "",
-                   "bid_increment_toman": blank(e.bid_increment),
+                   "bid_increment_toman": blank(e.bid_increment), 
                    "is_escalation": e.escalation,
                    "is_leader_change": e.leader_change, 
                    "prize_usd": format(s.prize_usd, "f"),
@@ -328,7 +327,8 @@ def main():
     print("No fixed increment or maximum bid. Type P to pass.\n")
     prize_usd = ask_decimal("Prize value in USD: ", "Prize value", True)
     rate = ask_decimal("Manual free-market rate (TOMAN per USD): ", "Rate", True)
-    rate_timestamp = now_utc()  # capture when the rate is entered, not after later prompts
+    rate_timestamp = now_utc()
+    # capture when the rate is entered, not after later prompts
     rate_source = input("Rate source/description (record what you actually used): ").strip()
     if not rate_source:
         rate_source = "Not provided by researcher"
