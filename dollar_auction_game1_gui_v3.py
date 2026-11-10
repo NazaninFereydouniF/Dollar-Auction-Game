@@ -24,8 +24,7 @@ def timestamp_pair() -> tuple[str, float]:
     return engine.now_utc(), time.perf_counter()
 
 def reaction_times(display_clock: float, opportunity_clock: float, submitted_clock: float) -> tuple[float, float]:
-    return (max(0.0, submitted_clock - opportunity_clock),
-            max(0.0, submitted_clock - display_clock))
+    return (max(0.0, submitted_clock - opportunity_clock), max(0.0, submitted_clock - display_clock))
 
 def group_digits_live(raw: str) -> str:
     #Format an amount with thousands separators while preserving a decimal tail.
@@ -88,22 +87,19 @@ class AuctionApp:
         self.mode_var = tk.StringVar(value="A")
         self.p1_var = tk.StringVar(value="Player A")
         self.p2_var = tk.StringVar(value="Player B")
-        fields = [("Prize value (USD)", self.prize_var),
-                  ("USD-to-toman rate (toman per USD)", self.rate_var),
-                  ("Rate source / description", self.source_var),
-                  ("Participant 1 label (pseudonym only)", self.p1_var),
-                  ("Participant 2 label (pseudonym only)", self.p2_var)]
+        fields = [("Prize value (USD)", self.prize_var), ("USD-to-toman rate (toman per USD)", self.rate_var), ("Rate source / description", self.source_var), ("Participant 1 label (pseudonym only)", self.p1_var), ("Participant 2 label (pseudonym only)", self.p2_var)]
         for row, (label, var) in enumerate(fields):
             self._tk_label(card, label, bg=PANEL, fg=MUTED).grid(row=row, column=0, sticky="w", pady=6)
-            entry = tk.Entry(card, textvariable=var, bg="#f8fafc", fg="#111827", insertbackground="#111827",
-                             relief="flat", font=("Segoe UI", 11), width=38)
+            entry = tk.Entry(card, textvariable=var, bg="#f8fafc", fg="#111827", insertbackground="#111827", relief="flat", font=("Segoe UI", 11), width=38)
             entry.grid(row=row, column=1, sticky="ew", padx=(20, 0), pady=6, ipady=6)
         card.columnconfigure(1, weight=1)
         self._tk_label(card, "Reaction-time reference", bg=PANEL, fg=MUTED).grid(row=5, column=0, sticky="w", pady=8)
         modebox = tk.Frame(card, bg=PANEL)
         modebox.grid(row=5, column=1, sticky="w", padx=(20, 0), pady=8)
         for label, value in [("A · opportunity start → response", "A"), ("B · opponent display → response", "B")]:
-            tk.Radiobutton(modebox, text=label, variable=self.mode_var, value=value, bg=PANEL, fg=TEXT, selectcolor=PANEL_ALT, activebackground=PANEL, activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w", pady=2)
+            tk.Radiobutton(modebox, text=label, variable=self.mode_var, value=value, bg=PANEL, fg=TEXT,
+                           selectcolor=PANEL_ALT, activebackground=PANEL, activeforeground=TEXT,
+                           font=("Segoe UI", 10)).pack(anchor="w", pady=2)
         self._tk_label(outer, "Bids are entered in toman and grouped by thousands as you type. No fixed bid increment or maximum is imposed.", bg=BG, fg=MUTED, wraplength=800, justify="left").pack(anchor="w", pady=(16, 6))
         self._tk_label(outer, f"Timing prototype: response controls activate {DISPLAY_TO_OPPORTUNITY_DELAY_MS} ms after the turn information is processed by the GUI.", bg=BG, fg=MUTED, wraplength=800, justify="left").pack(anchor="w", pady=(0, 16))
         tk.Button(outer, text="VALIDATE SETTINGS  →  START", command=self.start_game, bg=ACCENT, fg="#082f49", activebackground="#a5f3fc", activeforeground="#082f49", relief="flat", font=("Segoe UI", 11, "bold"), padx=18, pady=10, cursor="hand2").pack(anchor="w")
@@ -129,7 +125,6 @@ class AuctionApp:
         p2 = engine.Player("P-" + uuid.uuid4().hex[:6].upper(), p2_label)
         session_code = "SES-" + datetime.now(timezone.utc).strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:4].upper()
         self.session = engine.Session(session_code, prize_usd, rate, prize_usd * rate, source, rate_time, engine.MODE_A if self.mode_var.get() == "A" else engine.MODE_B, [p1, p2])
-
         import random
         order = self.session.players[:]
         random.shuffle(order)
@@ -151,7 +146,13 @@ class AuctionApp:
         self.summary.pack(anchor="w", fill="x", pady=(8, 14))
 
         self.turn_title = self._tk_label(self.main, "", bg=BG, fg=HIGHLIGHT, font=("Segoe UI", 14, "bold"))
-        self.turn_title.pack(anchor="w", pady=(0, 12))
+        self.turn_title.pack(anchor="w", pady=(0, 6))
+
+        # Keep the turn-transition control near the top of the window. In v4 it
+        # was below the history/results and could be clipped on common screens,
+        # leaving the game apparently stuck after the first decision.
+        self.continue_button = tk.Button(self.main, text="CONTINUE TO NEXT TURN  →", command=self._advance, state="disabled", bg="#334155", fg=TEXT, activebackground="#475569", relief="flat", font=("Segoe UI", 10, "bold"), padx=16, pady=8,cursor="hand2")
+        self.continue_button.pack(anchor="w", pady=(0, 12))
 
         # Large, stylized bid ticket: intentionally not an imitation of a real banknote.
         self.bid_card = tk.Frame(self.main, bg="#0f766e", padx=22, pady=16, highlightthickness=2, highlightbackground="#5eead4")
@@ -194,8 +195,6 @@ class AuctionApp:
         self._tk_label(self.main, "BID HISTORY · chronological order", bg=BG, fg=ACCENT, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(15, 5))
         self.history_display = self._tk_label(self.main, "No bids yet", bg=PANEL_ALT, fg=TEXT, justify="left", wraplength=820, padx=12, pady=10)
         self.history_display.pack(fill="x")
-        self.continue_button = tk.Button(self.main, text="CONTINUE TO NEXT TURN  →", command=self._advance, state="disabled", bg="#334155", fg=TEXT, activebackground="#475569", relief="flat", font=("Segoe UI", 10, "bold"), padx=16, pady=9, cursor="hand2")
-        self.continue_button.pack(anchor="w", pady=(14, 0))
         self.result_box = self._tk_label(self.main, "", bg=BG, fg=TEXT, justify="left", wraplength=820)
         self.result_box.pack(anchor="w", fill="x", pady=(10, 0))
         self._set_controls(False)
@@ -245,15 +244,17 @@ class AuctionApp:
         self.bid_var.set("")
         self._set_controls(False)
         s = self.session
-        self.summary.configure(text=(f"Prize: {engine.money(s.prize_toman)} toman  |  Fixed rate: {engine.money(s.rate)} toman/USD\n"
-                                     f"Session code: {s.sid}  |  Rate timestamp (UTC): {s.rate_timestamp}"))
+        self.summary.configure(text=(
+            f"Prize: {engine.money(s.prize_toman)} toman  |  Fixed rate: {engine.money(s.rate)} toman/USD\n"
+            f"Session code: {s.sid}  |  Rate timestamp (UTC): {s.rate_timestamp}"))
         self.turn_title.configure(text=f"YOUR TURN  ·  {self.current.label}")
         self.opponent_bid_display.configure(text=f"{engine.money(self.opponent.last_bid)} toman")
         self.highest_display.configure(text=f"{engine.money(s.highest_bid)} toman")
         self.prize_display.configure(text=f"{engine.money(s.prize_toman)} toman")
-        self.status.configure(text=(f"Opponent's last bid: {engine.money(self.opponent.last_bid)} toman. "
-                                    f"Your last bid: {engine.money(self.current.last_bid)} toman. "
-                                    "Enter an amount above the current highest bid, or pass."))
+        self.status.configure(text=(
+            f"Opponent's last bid: {engine.money(self.opponent.last_bid)} toman. "
+            f"Your last bid: {engine.money(self.current.last_bid)} toman. "
+            "Enter an amount above the current highest bid, or pass."))
         self._refresh_history()
         self.display_at, self.display_clock = "", 0.0
         self.opportunity_at, self.opportunity_clock = "", 0.0
@@ -310,7 +311,7 @@ class AuctionApp:
         engine.record_decision(self.session, self.current, self.opponent, action, bid, timing)
         if action == "bid":
             self.status.configure(text=f"Recorded bid: {engine.money(bid)} toman.")
-            self.bid_card.configure(bg="#7c3aed", highlightbackground="#c4b5fd")
+            self.bid_card.configure(bg="#7c3aed",  highlightbackground="#c4b5fd")
             self.opponent_bid_display.configure(text=f"{engine.money(bid)} toman", bg="#7c3aed")
         else:
             self.status.configure(text="Recorded pass.")
@@ -323,7 +324,8 @@ class AuctionApp:
             self.session.termination_reason = "opponent_passed_after_valid_bid" if self.session.leader_id else "both_passed_without_bid"
             self._finish_game()
             return
-        self.continue_button.configure(state="normal")
+        self.continue_button.configure(state="normal", text="CONTINUE TO NEXT TURN  →")
+        self.status.configure(text=self.status.cget("text") + "  Click CONTINUE above to hand over to the next participant.")
 
     def _advance(self):
         if self.game_over:
