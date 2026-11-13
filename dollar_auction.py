@@ -73,6 +73,9 @@ class Session:
     rate_timestamp: str
     reaction_mode: str
     players: list[Player]
+    arousal_condition: str = "Unassigned"
+    condition_order: int = 1
+    condition_protocol_id: str = "Not provided"
     started_at: str = field(default_factory=now_utc)
     started_clock: float = field(default_factory=time.perf_counter)
     events: list[Event] = field(default_factory=list)
@@ -176,7 +179,7 @@ def outcome(s: Session):
             "winning_bid_ratio": float(winning_bid / s.prize_toman) if winning_bid is not None and s.prize_toman > 0 else None}
 
 def validate_game(s: Session, result: dict) -> list[str]:
-    #Validate event order, bid progression, leader state, and first-game payoffs.Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
+    #Validate event order, bid progression, leader state, and first-game payoffs. Raises ValueError on inconsistency; returns a short list of passed checks otherwise.
     
     if not s.events:
         raise ValueError("A game must contain at least one decision event.")
@@ -242,7 +245,6 @@ def validate_game(s: Session, result: dict) -> list[str]:
     checks.extend(["sequential stages and valid action types", "strictly increasing bids and bid increments", "leader and opponent-bid history reconstructed from events", "final bids, winner, payments, and net payoffs consistent with Game 1"])
     return checks
 
-
 def non_overwriting_path(path: Path) -> Path:
     #Return path if unused, otherwise choose a numbered filename without overwriting.
     if not path.exists():
@@ -255,7 +257,7 @@ def non_overwriting_path(path: Path) -> Path:
             return candidate
         index += 1
 
-FIELDS = ["game_version", "session_code", "round_number", "event_code", "stage_number", "participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman", "event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at", "response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b", "selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id", "leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change", "prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp", "round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages", "escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman", "winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman", "participant_payment_toman", "participant_net_payoff_toman", "termination_reason", "arousal_condition", "condition_order", "chronological_bid_sequence_toman", "chronological_bid_sequence", "notes"]
+FIELDS = ["game_version", "session_code", "round_number", "event_code", "stage_number", "participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman", "event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at", "response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b", "selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id", "leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change", "prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp", "round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages", "escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman", "winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman", "participant_payment_toman", "participant_net_payoff_toman", "termination_reason", "arousal_condition", "condition_order", "condition_protocol_id", "chronological_bid_sequence_toman", "chronological_bid_sequence", "notes"]
 
 def save_csv(s: Session, result: dict, path: Path, notes: str):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,8 +316,9 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
                    "participant_payment_toman": format(result["payments"][p.pid], "f"),
                    "participant_net_payoff_toman": format(result["payoffs"][p.pid], "f"),
                    "termination_reason": s.termination_reason, 
-                   "arousal_condition": "", 
-                   "condition_order": "",
+                   "arousal_condition": s.arousal_condition, 
+                   "condition_order": s.condition_order,
+                   "condition_protocol_id": s.condition_protocol_id,
                    "chronological_bid_sequence_toman": chronological_amounts,
                    "chronological_bid_sequence": chronological_labeled, 
                    "notes": notes}
@@ -327,8 +330,7 @@ def main():
     print("No fixed increment or maximum bid. Type P to pass.\n")
     prize_usd = ask_decimal("Prize value in USD: ", "Prize value", True)
     rate = ask_decimal("Manual free-market rate (TOMAN per USD): ", "Rate", True)
-    rate_timestamp = now_utc()
-    # capture when the rate is entered, not after later prompts
+    rate_timestamp = now_utc()  # capture when the rate is entered, not after later prompts
     rate_source = input("Rate source/description (record what you actually used): ").strip()
     if not rate_source:
         rate_source = "Not provided by researcher"
