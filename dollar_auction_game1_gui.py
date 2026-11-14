@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-import dollar_auction as engine
+import dollar_auction_game1_local_v4_3 as engine
 
 DISPLAY_TO_OPPORTUNITY_DELAY_MS = 1000
 BG = "#101827"
@@ -24,8 +24,8 @@ def timestamp_pair() -> tuple[str, float]:
     return engine.now_utc(), time.perf_counter()
 
 def reaction_times(display_clock: float, opportunity_clock: float, submitted_clock: float) -> tuple[float, float]:
-    return (max(0.0, submitted_clock - opportunity_clock),
-            max(0.0, submitted_clock - display_clock))
+    return (max(0.0, submitted_clock - opportunity_clock), max(0.0, submitted_clock - display_clock))
+
 
 def group_digits_live(raw: str) -> str:
     #Format an amount with thousands separators while preserving a decimal tail.
@@ -86,30 +86,16 @@ class AuctionApp:
         self.rate_var = tk.StringVar(value="100000")
         self.source_var = tk.StringVar(value="")
         self.mode_var = tk.StringVar(value="A")
-        self.arousal_var = tk.StringVar(value="Low")
-        self.condition_order_var = tk.StringVar(value="1")
-        self.protocol_var = tk.StringVar(value="")
         self.p1_var = tk.StringVar(value="Player A")
         self.p2_var = tk.StringVar(value="Player B")
-        fields = [("Prize value (USD)", self.prize_var),
-                  ("USD-to-toman rate (toman per USD)", self.rate_var),
-                  ("Rate source / description", self.source_var),
-                  ("Participant 1 label (pseudonym only)", self.p1_var),
-                  ("Participant 2 label (pseudonym only)", self.p2_var)]
+        fields = [("Prize value (USD)", self.prize_var), ("USD-to-toman rate (toman per USD)", self.rate_var), ("Rate source / description", self.source_var), ("Participant 1 label (pseudonym only)", self.p1_var), ("Participant 2 label (pseudonym only)", self.p2_var)]
         for row, (label, var) in enumerate(fields):
             self._tk_label(card, label, bg=PANEL, fg=MUTED).grid(row=row, column=0, sticky="w", pady=6)
-            entry = tk.Entry(card, textvariable=var, bg="#f8fafc",  fg="#111827", insertbackground="#111827", relief="flat", font=("Segoe UI", 11), width=38)
+            entry = tk.Entry(card, textvariable=var, bg="#f8fafc", fg="#111827", insertbackground="#111827", relief="flat", font=("Segoe UI", 11), width=38)
             entry.grid(row=row, column=1, sticky="ew", padx=(20, 0), pady=6, ipady=6)
-        self._tk_label(card, "Assigned arousal condition", bg=PANEL, fg=MUTED).grid(row=5, column=0, sticky="w", pady=6)
-        condition_box = ttk.Combobox(card, textvariable=self.arousal_var, values=("Low", "Medium", "High"), state="readonly", width=35)
-        condition_box.grid(row=5, column=1, sticky="ew", padx=(20, 0), pady=6, ipady=4)
-        self._tk_label(card, "Condition order (counterbalancing index)", bg=PANEL, fg=MUTED).grid(row=6, column=0, sticky="w", pady=6)
-        tk.Entry(card, textvariable=self.condition_order_var, bg="#f8fafc", fg="#111827", relief="flat", font=("Segoe UI", 11), width=38).grid(row=6, column=1, sticky="ew", padx=(20, 0), pady=6, ipady=6)
-        self._tk_label(card, "Approved protocol/script ID", bg=PANEL, fg=MUTED).grid(row=7, column=0, sticky="w", pady=6)
-        tk.Entry(card, textvariable=self.protocol_var, bg="#f8fafc", fg="#111827", relief="flat", font=("Segoe UI", 11), width=38).grid(row=7, column=1, sticky="ew", padx=(20, 0), pady=6, ipady=6)
-        self._tk_label(card, "Reaction-time reference", bg=PANEL, fg=MUTED).grid(row=8, column=0, sticky="w", pady=8)
+        self._tk_label(card, "Reaction-time reference", bg=PANEL, fg=MUTED).grid(row=5, column=0, sticky="w", pady=8)
         modebox = tk.Frame(card, bg=PANEL)
-        modebox.grid(row=8, column=1, sticky="w", padx=(20, 0), pady=8)
+        modebox.grid(row=5, column=1, sticky="w", padx=(20, 0), pady=8)
         for label, value in [("A · opportunity start → response", "A"), ("B · opponent display → response", "B")]:
             tk.Radiobutton(modebox, text=label, variable=self.mode_var, value=value, bg=PANEL, fg=TEXT, selectcolor=PANEL_ALT, activebackground=PANEL, activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w", pady=2)
         self._tk_label(outer, "Bids are entered in toman and grouped by thousands as you type. No fixed bid increment or maximum is imposed.", bg=BG, fg=MUTED, wraplength=800, justify="left").pack(anchor="w", pady=(16, 6))
@@ -132,26 +118,14 @@ class AuctionApp:
             messagebox.showerror("Invalid labels", "Use distinct participant labels.")
             return
         source = self.source_var.get().strip() or "Not provided by researcher"
-        try:
-            condition_order = int(self.condition_order_var.get().strip())
-            if condition_order < 1:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Invalid condition order", "Condition order must be a positive integer.")
-            return
-        protocol_id = self.protocol_var.get().strip()
-        if not protocol_id:
-            messagebox.showerror("Protocol required", "Enter the approved arousal-manipulation script/protocol ID. The condition label alone does not induce or validate arousal.")
-            return
-        instructions = ("STANDARD GAME INSTRUCTIONS\n\n" "You are playing a two-person dollar auction. The prize value is shown in toman. " "Each valid new bid must be strictly higher than the current highest bid. There is no fixed increment or maximum bid. " "You may submit a valid bid or pass. Passing ends the game after a valid bid has been made; if nobody has bid yet, " "the other participant receives an opening opportunity. In Game 1, each participant pays only their own final bid. " "The winner receives the prize and pays their own final bid; the other participant pays their own final bid and receives no prize.\n\n" f"Assigned condition: {self.arousal_var.get()}. Protocol: {protocol_id}.\n" "Read the approved condition-specific manipulation script separately and consistently before continuing.")
+        instructions = ( "STANDARD GAME INSTRUCTIONS\n\n" "You are playing a two-person dollar auction. The prize value is shown in toman. " "Each valid new bid must be strictly higher than the current highest bid. There is no fixed increment or maximum bid. " "You may submit a valid bid or pass. Passing ends the game after a valid bid has been made; if nobody has bid yet, " "the other participant receives an opening opportunity. In Game 1, each participant pays only their own final bid. " "The winner receives the prize and pays their own final bid; the other participant pays their own final bid and receives no prize.\n\n" "After the game, bids will be categorized for analysis relative to the prize value. No arousal category is selected during play.")
         if not messagebox.askokcancel("Read standardized instructions", instructions):
             return
         rate_time = engine.now_utc()
         p1 = engine.Player("P-" + uuid.uuid4().hex[:6].upper(), p1_label)
         p2 = engine.Player("P-" + uuid.uuid4().hex[:6].upper(), p2_label)
         session_code = "SES-" + datetime.now(timezone.utc).strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:4].upper()
-        self.session = engine.Session(session_code, prize_usd, rate, prize_usd * rate, source, rate_time, engine.MODE_A if self.mode_var.get() == "A" else engine.MODE_B, [p1, p2], arousal_condition=self.arousal_var.get(), condition_order=condition_order, condition_protocol_id=protocol_id)
-
+        self.session = engine.Session(session_code, prize_usd, rate, prize_usd * rate, source, rate_time, engine.MODE_A if self.mode_var.get() == "A" else engine.MODE_B, [p1, p2])
         import random
         order = self.session.players[:]
         random.shuffle(order)
@@ -204,7 +178,7 @@ class AuctionApp:
         self.status.pack(anchor="w", fill="x", pady=(0, 12))
         self.input_frame = tk.Frame(self.main, bg=PANEL, padx=18, pady=16)
         self.input_frame.pack(fill="x")
-        self._tk_label(self.input_frame, "YOUR BID (TOMAN)", bg=PANEL, fg=MUTED,font=("Segoe UI", 9, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        self._tk_label(self.input_frame, "YOUR BID (TOMAN)", bg=PANEL, fg=MUTED, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
         self.bid_var = tk.StringVar()
         self.bid_entry = tk.Entry(self.input_frame, textvariable=self.bid_var, bg="#f8fafc", fg="#111827", insertbackground="#111827", relief="flat", font=("Segoe UI", 19, "bold"), width=24)
         self.bid_entry.grid(row=1, column=0, sticky="ew", ipady=7)
@@ -270,15 +244,13 @@ class AuctionApp:
         self._set_controls(False)
         s = self.session
         self.summary.configure(text=(f"Prize: {engine.money(s.prize_toman)} toman  |  Fixed rate: {engine.money(s.rate)} toman/USD\n"
-                                     f"Session code: {s.sid}  |  Rate timestamp (UTC): {s.rate_timestamp}\n"
-                                     f"Arousal condition: {s.arousal_condition}  |  Condition order: {s.condition_order}  |  Protocol: {s.condition_protocol_id}"))
+                                     f"Session code: {s.sid}  |  Rate timestamp (UTC): {s.rate_timestamp}\n" "Competitive-arousal categories will be derived post hoc from each participant’s bid relative to the prize value."))
         self.turn_title.configure(text=f"YOUR TURN  ·  {self.current.label}")
         self.opponent_bid_display.configure(text=f"{engine.money(self.opponent.last_bid)} toman")
         self.highest_display.configure(text=f"{engine.money(s.highest_bid)} toman")
         self.prize_display.configure(text=f"{engine.money(s.prize_toman)} toman")
         self.status.configure(text=(f"Opponent's last bid: {engine.money(self.opponent.last_bid)} toman. "
-                                    f"Your last bid: {engine.money(self.current.last_bid)} toman. "
-                                    "Enter an amount above the current highest bid, or pass."))
+                                    f"Your last bid: {engine.money(self.current.last_bid)} toman. " "Enter an amount above the current highest bid, or pass."))
         self._refresh_history()
         self.display_at, self.display_clock = "", 0.0
         self.opportunity_at, self.opportunity_clock = "", 0.0
@@ -380,6 +352,10 @@ class AuctionApp:
             lines.append(f"{p.label}: final bid {engine.money(p.last_bid)}; payment {engine.money(result['payments'][p.pid])}; net payoff {engine.money(result['payoffs'][p.pid])} toman")
         lines.append(f"Stages: {self.session.stages}; bids: {sum(e.action == 'bid' for e in self.session.events)}; escalations: {self.session.escalation_count}; leader changes: {self.session.leader_change_count}")
         lines.append(f"Round duration: {result['duration']:.3f} seconds")
+        lines.append("\nPOST-HOC COMPETITIVE-AROUSAL CLASSIFICATION (behavioral proxy)")
+        for summary in engine.summarize_competitive_arousal(self.session):
+            lines.append(f"{summary['participant_label']}: A={summary['stages_classified_A']} stages; B={summary['stages_classified_B']} stages; C={summary['stages_classified_C']} stages; highest={summary['highest_level_reached']}; first B+={summary['first_stage_B_or_higher'] or 'not reached'}; first C={summary['first_stage_C'] or 'not reached'}")
+        lines.append("Rule: A < 50% of prize; B = 50% through 100% of prize; C > 100% of prize. This is a bid-based post-hoc proxy, not direct measurement of subjective arousal.")
         self.result_box.configure(text="\n".join(lines))
         self.status.configure(text="Game finished. Validate pilot data and research protocol before any formal data collection.")
         messagebox.showinfo("Debrief", "Thank you for participating. The task studied decisions in a competitive bidding situation. No individual response should be interpreted in isolation. The researcher should now provide the approved study-specific debrief, explain the purpose of the arousal manipulation, and answer questions. This generic notice does not replace an ethics-approved debrief.")
@@ -396,13 +372,15 @@ class AuctionApp:
         requested = Path(selected).expanduser()
         safe = engine.non_overwriting_path(requested)
         try:
-            engine.save_csv(self.session, result, safe, "GUI v4.2; local two-player Game 1; assigned arousal-condition metadata; live thousands grouping; chronological bid sequence; not validated as a research instrument")
+            engine.save_csv(self.session, result, safe, "GUI v4.3; local two-player Game 1; post-hoc bid-based competitive-arousal classification; live thousands grouping; chronological bid sequence; not validated as a research instrument")
+            analysis_path = safe.with_name(safe.stem + "_stage_analysis.csv")
+            stage_path, summary_path = engine.save_analysis_csv(self.session, analysis_path)
         except OSError as exc:
             messagebox.showerror("Save failed", str(exc))
             return
         self.events_saved = True
-        self.result_box.configure(text=self.result_box.cget("text") + f"\n\nCSV saved to:\n{safe.resolve()}")
-        messagebox.showinfo("Saved", f"CSV saved to:\n{safe.resolve()}")
+        self.result_box.configure(text=self.result_box.cget("text") + f"\n\nDecision data saved to:\n{safe.resolve()}\nStage-level classification:\n{stage_path.resolve()}\nParticipant summary:\n{summary_path.resolve()}")
+        messagebox.showinfo("Saved", f"Decision data:\n{safe.resolve()}\n\nStage analysis:\n{stage_path.resolve()}\n\nParticipant summary:\n{summary_path.resolve()}")
 
 def main():
     root = tk.Tk()
