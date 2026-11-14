@@ -73,9 +73,6 @@ class Session:
     rate_timestamp: str
     reaction_mode: str
     players: list[Player]
-    arousal_condition: str = "Unassigned"
-    condition_order: int = 1
-    condition_protocol_id: str = "Not provided"
     started_at: str = field(default_factory=now_utc)
     started_clock: float = field(default_factory=time.perf_counter)
     events: list[Event] = field(default_factory=list)
@@ -257,7 +254,86 @@ def non_overwriting_path(path: Path) -> Path:
             return candidate
         index += 1
 
-FIELDS = ["game_version", "session_code", "round_number", "event_code", "stage_number", "participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman", "event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at", "response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b", "selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id", "leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change", "prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp", "round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages", "escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman", "winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman", "participant_payment_toman", "participant_net_payoff_toman", "termination_reason", "arousal_condition", "condition_order", "condition_protocol_id", "chronological_bid_sequence_toman", "chronological_bid_sequence", "notes"]
+def classify_competitive_arousal(bid: Decimal | None, prize: Decimal) -> str | None:
+    #Post-hoc operational category from the participant's current bid vs prize.
+    """
+    A: current bid < 50% of prize; B: 50% of prize through prize inclusive;
+    C: current bid > prize. A zero/no-bid state is unclassified.
+    This is a behavioral proxy derived after the task, not a direct psychometric
+    measurement of subjective arousal.
+    """
+    if bid is None or bid <= 0 or prize <= 0:
+        return None
+    if bid < prize / Decimal("2"):
+        return "A"
+    if bid <= prize:
+        return "B"
+    return "C"
+
+def build_stage_analysis(s: Session) -> list[dict]:
+    #One post-hoc analysis row per decision event, based on that player's current bid at that point in the sequence, not a condition selected at start.
+    
+    current = {p.pid: Decimal("0") for p in s.players}
+    rows = []
+    for e in sorted(s.events, key=lambda x: x.stage):
+        if e.action == "bid" and e.bid is not None:
+            current[e.pid] = e.bid
+        bid = current[e.pid]
+        level = classify_competitive_arousal(bid, s.prize_toman)
+        rows.append({"session_code": s.sid, 
+                     "stage_number": e.stage, 
+                     "event_code": e.event_id,
+                     "participant_id": e.pid, 
+                     "opponent_id": e.opponent_id,
+                     "action": e.action, 
+                     "new_bid_toman": blank(e.bid),
+                     "participant_current_bid_toman": format(bid, "f") if bid > 0 else "",
+                     "prize_toman": format(s.prize_toman, "f"),
+                     "current_bid_to_prize_ratio": f"{float(bid / s.prize_toman):.6f}" if bid > 0 and s.prize_toman > 0 else "",
+                     "competitive_arousal_level": level or "",
+                     "classification_rule": "A: bid < 50% prize; B: 50% prize <= bid <= 100% prize; C: bid > 100% prize",
+                     "classification_is_posthoc_behavioral_proxy": "True",
+                     "event_timestamp": e.event_timestamp})
+    return rows
+
+def summarize_competitive_arousal(s: Session) -> list[dict]:
+    #Per-player stage counts by category and first stage reaching B/C.
+    rows = build_stage_analysis(s)
+    out = []
+    for p in s.players:
+        own = [r for r in rows if r["participant_id"] == p.pid]
+        levels = [r["competitive_arousal_level"] for r in own if r["competitive_arousal_level"]]
+        out.append({"session_code": s.sid,
+                    "participant_id": p.pid, 
+                    "participant_label": p.label,
+                    "final_bid_toman": format(p.last_bid, "f"), 
+                    "prize_toman": format(s.prize_toman, "f"),
+                    "stages_classified_A": sum(x == "A" for x in levels),
+                    "stages_classified_B": sum(x == "B" for x in levels),
+                    "stages_classified_C": sum(x == "C" for x in levels),
+                    "first_stage_B_or_higher": next((r["stage_number"] for r in own if r["competitive_arousal_level"] in ("B", "C")), ""),
+                    "first_stage_C": next((r["stage_number"] for r in own if r["competitive_arousal_level"] == "C"), ""),
+                    "highest_level_reached": next((x for x in ("C", "B", "A") if x in levels), "None"),
+                    "rule": "A < 50% prize; B >= 50% and <= prize; C > prize",
+                    "interpretation_note": "Behavioral classification based on bid trajectory; not a direct self-report/physiological arousal measure."})
+    return out
+
+def save_analysis_csv(s: Session, path: Path):
+    #Write stage-level classifications and a separate participant summary.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = build_stage_analysis(s)
+    if rows:
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader(); writer.writerows(rows)
+    summary_path = path.with_name(path.stem.replace("_stage_analysis", "_participant_summary") + path.suffix)
+    summary = summarize_competitive_arousal(s)
+    with summary_path.open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()) if summary else ["session_code"])
+        writer.writeheader(); writer.writerows(summary)
+    return path, summary_path
+
+FIELDS = ["game_version", "session_code", "round_number", "event_code", "stage_number","participant_id", "opponent_id", "action", "new_bid_toman", "opponent_previous_bid_toman","event_timestamp", "opponent_bid_displayed_at", "response_opportunity_started_at","response_submitted_at", "reaction_time_seconds_mode_a", "reaction_time_seconds_mode_b", "selected_reaction_mode", "selected_reaction_time_seconds", "previous_leader_id","leader_after_decision_id", "bid_increment_toman", "is_escalation", "is_leader_change","prize_usd", "usd_to_toman_rate", "prize_toman", "rate_source", "rate_method", "rate_timestamp","round_started_at", "round_ended_at", "round_duration_seconds", "total_bids", "total_stages","escalation_count", "leader_change_count", "winner_id", "loser_id", "winning_bid_toman","winning_bid_minus_prize_toman", "winning_bid_to_prize_ratio", "participant_final_bid_toman","participant_payment_toman", "participant_net_payoff_toman", "termination_reason","participant_current_bid_toman", "competitive_arousal_level", "competitive_arousal_rule","competitive_arousal_ratio_to_prize", "chronological_bid_sequence_toman","chronological_bid_sequence", "notes"]
 
 def save_csv(s: Session, result: dict, path: Path, notes: str):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,12 +342,16 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
     bid_events = [e for e in s.events if e.action == "bid" and e.bid is not None]
     chronological_amounts = " → ".join(money(e.bid) for e in bid_events)
     chronological_labeled = " → ".join(f"{player_labels[e.pid]}: {money(e.bid)}" for e in bid_events)
+    current_bids = {p.pid: Decimal("0") for p in s.players}
     with path.open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
         for e in s.events:
             p = next(x for x in s.players if x.pid == e.pid)
-            row = {"game_version": GAME_VERSION, 
+            if e.action == "bid" and e.bid is not None:
+                current_bids[e.pid] = e.bid
+            current_bid = current_bids[e.pid]
+            row = {"game_version": GAME_VERSION,
                    "session_code": s.sid, 
                    "round_number": 1,
                    "event_code": e.event_id, 
@@ -287,7 +367,7 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
                    "response_submitted_at": e.response_submitted_at,
                    "reaction_time_seconds_mode_a": f"{e.rt_a:.6f}", 
                    "reaction_time_seconds_mode_b": f"{e.rt_b:.6f}",
-                   "selected_reaction_mode": e.selected_mode, 
+                   "selected_reaction_mode": e.selected_mode,
                    "selected_reaction_time_seconds": f"{e.selected_rt:.6f}",
                    "previous_leader_id": e.previous_leader_id or "", 
                    "leader_after_decision_id": e.leader_after_id or "",
@@ -315,13 +395,13 @@ def save_csv(s: Session, result: dict, path: Path, notes: str):
                    "participant_final_bid_toman": format(p.last_bid, "f"),
                    "participant_payment_toman": format(result["payments"][p.pid], "f"),
                    "participant_net_payoff_toman": format(result["payoffs"][p.pid], "f"),
-                   "termination_reason": s.termination_reason, 
-                   "arousal_condition": s.arousal_condition, 
-                   "condition_order": s.condition_order,
-                   "condition_protocol_id": s.condition_protocol_id,
+                   "termination_reason": s.termination_reason,
+                   "participant_current_bid_toman": format(current_bid, "f") if current_bid > 0 else "",
+                   "competitive_arousal_level": classify_competitive_arousal(current_bid, s.prize_toman) or "",
+                   "competitive_arousal_rule": "A: bid < 0.5*prize; B: 0.5*prize <= bid <= prize; C: bid > prize",
+                   "competitive_arousal_ratio_to_prize": f"{float(current_bid / s.prize_toman):.6f}" if s.prize_toman > 0 and current_bid > 0 else "",
                    "chronological_bid_sequence_toman": chronological_amounts,
-                   "chronological_bid_sequence": chronological_labeled, 
-                   "notes": notes}
+                   "chronological_bid_sequence": chronological_labeled, "notes": notes}
             writer.writerow(row)
 
 def main():
@@ -330,7 +410,7 @@ def main():
     print("No fixed increment or maximum bid. Type P to pass.\n")
     prize_usd = ask_decimal("Prize value in USD: ", "Prize value", True)
     rate = ask_decimal("Manual free-market rate (TOMAN per USD): ", "Rate", True)
-    rate_timestamp = now_utc()  # capture when the rate is entered, not after later prompts
+    rate_timestamp = now_utc() #capture when the rate is entered, not after later prompts
     rate_source = input("Rate source/description (record what you actually used): ").strip()
     if not rate_source:
         rate_source = "Not provided by researcher"
