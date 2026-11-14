@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-import dollar_auction_game1_local_v4_3 as engine
+import dollar_auction as engine
 
 DISPLAY_TO_OPPORTUNITY_DELAY_MS = 1000
 BG = "#101827"
